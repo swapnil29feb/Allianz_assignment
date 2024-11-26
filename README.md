@@ -9,4 +9,3 @@ pip install -r requirements.txt
 
 # Run the main file #
 python assesment.py
-
