@@ -1,11 +1,18 @@
+import aiohttp
 import openpyxl
-import requests
+import asyncio
 from bs4 import BeautifulSoup
 from zipfile import ZipFile
 import os
 
+
+async def fetch(url):
+    async with aiohttp.ClientSession() as session:
+        async with session.get(url) as response:
+            return await response.text()
+
 # Getting Paginations Links
-def get_pageinations_links(soup):
+async def get_pageinations_links(soup):
     # Getting Pagination for number of pages should iterate
     pages_iter = soup.find("ul", class_ = 'pagination')
     try:
@@ -22,29 +29,33 @@ def get_pageinations_links(soup):
     
     
 # Finding all the heading of tables
-def get_table_headers(soup):
+async def get_table_headers(soup):
     headers_text = soup.find_all('th')
     main_table_headers = [title.text.strip() for title in headers_text]
     # print(main_table_headers) # ['Team Name', 'Year', 'Wins', 'Losses', 'OT Losses', 'Win %', 'Goals For (GF)', 'Goals Against (GA)', '+ / -']
     return main_table_headers
 
 # Function to fetch HTML content from the given URL
-def fetch_html(url):
-    response = requests.get(url)
-    if response.status_code == 200:
-        return response.text
-    else:
-        print(f"Failed to fetch URL: {url}, Status Code: {response.status_code}")
-        return None
+async def fetch_html(url):
+    # response = requests.get(url)
+    async with aiohttp.ClientSession() as session:
+        async with session.get(url) as resp:
+            # print(resp.status)
+            # print(await resp.text())
+            if resp.status == 200:
+                return await resp.text()
+            else:
+                print(f"Failed to fetch URL: {url}, Status Code: {resp.status}")
+                return None
     
-def save_html_pages(soups, page_count, output_dir):
+async def save_html_pages(soups, page_count, output_dir):
     os.makedirs(output_dir, exist_ok=True)
     filenaem = f"{page_count}.html" 
     file_path = os.path.join(output_dir, filenaem)
     with open(file_path, "w", encoding= 'utf-8') as html:
         html.write(str(soups.prettify()))
 
-def save_data_sheet(soups, data):
+async def save_data_sheet(soups, data):
     cell_datas = soups.find_all('tr', class_='team')
     for row_data in cell_datas:
         try:
@@ -62,14 +73,14 @@ def save_data_sheet(soups, data):
             print("Error processing row:", e)
 
 
-def zip_html_pages(zip_dir, output_dir):
+async def zip_html_pages(zip_dir, output_dir):
     with ZipFile(zip_dir, 'w') as ziper:
         for root, _, files in os.walk(output_dir):
             for file in files:
                 ziper.write(os.path.join(root, file), arcname=file)
 
 
-def write_to_excel(data_dicts, main_table_headers, file_name):
+async def write_to_excel(data_dicts, main_table_headers, file_name):
     workbook = openpyxl.Workbook()
     sheet = workbook.active
     sheet.title = "Data"
@@ -82,16 +93,11 @@ def write_to_excel(data_dicts, main_table_headers, file_name):
     workbook.save("output.xlsx")
 
 
-def calculate_winner_loser(file_name, output_sheet_name):
-    # Calculating the the Top wins and loss in a year
-    worksheet_name =  file_name
+async def calculate_winner_loser(file_name, output_sheet_name):
+    worksheet_name =  r"output.xlsx"
     rb = openpyxl.load_workbook(worksheet_name)
     sheet = rb.active
     ws = rb.create_sheet('Winner and Loser per Year')
-    # Create headers for the new sheet
-    ws.append(['Year', 'Winner', 'Winner Num. of Wins', 'Loser', 'Loser Num. of Wins'])
-    rb = openpyxl.load_workbook(worksheet_name)
-    ws = rb.create_sheet(output_sheet_name)
     # Create headers for the new sheet
     ws.append(['Year', 'Winner', 'Winner Num. of Wins', 'Loser', 'Loser Num. of Wins'])
     temp = []
@@ -101,23 +107,41 @@ def calculate_winner_loser(file_name, output_sheet_name):
         wins = row[2].value
         # print(year, name, wins)
         temp.append((year,name,wins))
-    result = sorted(temp, key = lambda x : x[2], reverse=False)
-    hst_len = len(result)
-    # Appending New Values to sheet 2 
-    ws.append([result[2][1], result[2][0], result[2][2], result[hst_len - 3][1], result[hst_len - 3][0], result[hst_len - 3][2]])
+
+    #  Getting unique years from temp list
+    years_temp = []
+    x = [years_temp.append(temp[x][0]) for x in range(len(temp)) if temp[x][0] not in years_temp]
+    # print("Unique Years: ", years_temp)
+    for year in years_temp[1:]:
+        max_ls = []
+        for data in temp:
+            if year == data[0]:
+                max_ls.append(data)
+                
+        max_value = max(max_ls, key=lambda x: int(x[2]))
+        min_value = min(max_ls, key=lambda x: int(x[2]))
+        
+        year_max_min = max_value[0]
+        team_max = max_value[1]
+        team_min = min_value[1]
+        score_max = max_value[2]
+        score_min = min_value[2]
+        # print(f"Year: {year_max_min} | Max_Team: {team_max} | MAXScore: {score_max} | Min_team: {team_min} | MinScore: {score_min}")
+        ws.append([year_max_min, team_max, score_max, team_min, score_min])
+    
     rb.save(worksheet_name)
     print(f"Sheet '{output_sheet_name}' updated successfully!")
 
 
-def main():
+#########  Main Fucntion #########
+async def main():
     # Main URL to fetch
     url = "https://www.scrapethissite.com/pages/forms/"
-    response = requests.get(url)
-    # print(response) #<Response [200]>
-    soup = BeautifulSoup(response.text, "html.parser")
-    
-    main_table_headers = get_table_headers(soup)
-    pagination_links = get_pageinations_links(soup)
+    response = await fetch(url)
+    # print("AIOHTTP: ", response)
+    soup = BeautifulSoup(response, "html.parser")
+    main_table_headers = await get_table_headers(soup)
+    pagination_links = await get_pageinations_links(soup)
     
     zip_dir = "Collection_html.zip"
     output_dir = "HTML PAGES"
@@ -128,20 +152,21 @@ def main():
     
     for page in pagination_links:
         page_url = f"https://www.scrapethissite.com/{page}"
-        soups = BeautifulSoup(fetch_html(page_url), 'html.parser')
-        save_html_pages(soups, page_count, output_dir)
-        save_data_sheet(soups, data)
+        soups = BeautifulSoup(await fetch_html(page_url), 'html.parser')
+        await save_html_pages(soups, page_count, output_dir)
+        await save_data_sheet(soups, data)
         page_count += 1
 
-    zip_html_pages(zip_dir, output_dir)
+    
+    await zip_html_pages(zip_dir, output_dir)
     
     # Create dictionary list for writing to Excel
     data_dicts = [dict(zip(main_table_headers, row)) for row in data]
     
-    write_to_excel(data_dicts, main_table_headers, file_name)
+    await write_to_excel(data_dicts, main_table_headers, file_name)
     
     # Calculate and append winners/losers per year
-    calculate_winner_loser(file_name, "Winner and Loser per Year")
+    await calculate_winner_loser(file_name, "Winner and Loser per Year")
     
 if __name__ == "__main__":
-    main()
+    asyncio.run(main())
