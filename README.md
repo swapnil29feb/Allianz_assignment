@@ -1,4 +1,6 @@
+## Blocks of code
 
+```
 # Create Virtual Environment #
 
 python -m venv venv
@@ -9,3 +11,4 @@ pip install -r requirements.txt
 
 # Run the main file #
 python assesment.py
+```
