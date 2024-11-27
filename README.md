@@ -15,7 +15,11 @@ python assesment.py
 
 
 
-## SCreenshot Images
-# worksheet 1
+## Screenshot Images
+#worksheet 1
+![1](https://github.com/user-attachments/assets/3c353d1b-5bbc-4449-977d-5de94a84ed28)
+
+#worksheet 2
+![2](https://github.com/user-attachments/assets/486bd4e6-4ad0-4294-9f2c-7a5293424471)
 
 
